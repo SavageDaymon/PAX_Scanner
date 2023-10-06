@@ -7,7 +7,7 @@ struct I2C_Info I2C_Table[I2C_DEVICES] =
     {   I2C3,   0,  0x21,   "AD7997/8",     "A/D Converter"         },
     {   I2C3,   0,  0x60,   "TLC59116F",    "LED Driver"            },  // Uses I2C3ARSTN
     {   I2C3,   1,  0x48,   "PCT2075",      "Temperature Sensor"    },  // Uses I2C3BRSTN
-    {   I2C4,  -1,  0x48,   "RV-4162-C7",   "Real-time Clock"       }   // Uses RTC_IRQ
+    {   I2C4,  -1,  0x68,   "RV-4162-C7",   "Real-time Clock"       }   // Uses RTC_IRQ
 };
 
 TwoWire * GetTwoWire(unsigned int devidx)
@@ -26,7 +26,7 @@ TwoWire *   wire = GetTwoWire(devidx);
 
     if(info->Mux != -1)
     {
-        wire->beginTransmission(MUX_ADDRESS);
+        wire->beginTransmission(I2C_Table[DEV_MUX].Addr);
         wire->write(1 << info->Mux);
         wire->endTransmission();
     }
@@ -39,7 +39,7 @@ bool IIC::Close(TwoWire * wire)
     return(wire->endTransmission() == 0);
 }
 
-bool IIC::Write(unsigned char devidx,unsigned char * bytes,int count)
+bool IIC::Write(unsigned char devidx,unsigned char * bytes,unsigned int count)
 {
 TwoWire *   wire;
 
@@ -68,7 +68,7 @@ unsigned char   buffer[16];
 
 #define MAX_LOOPS       16
 
-bool IIC::RequestBytes(unsigned char devidx,int count)
+bool IIC::RequestBytes(unsigned char devidx,unsigned int count)
 {
 TwoWire *   wire = GetTwoWire(devidx);
 
@@ -85,47 +85,107 @@ TwoWire *   wire = GetTwoWire(devidx);
     return(true);
 }
 
+bool IIC::ReadBytes(unsigned char devidx,unsigned char * bytes,unsigned int count)
+{
+    return(RequestBytes(devidx,count) && GetTwoWire(devidx)->readBytes(bytes,count) == count);
+}
+
+inline unsigned short SwapBytes(unsigned short value)
+{
+    return((value << 8) | (value >> 8));
+}
+
+bool IIC::ReadWords(unsigned char devidx,unsigned short * values,unsigned int count)
+{
+unsigned int idx;
+
+    if(ReadBytes(devidx,(unsigned char *) values,count*2))
+    {
+        for(idx=0;idx<count;idx++)
+        {
+            values[idx] = SwapBytes(values[idx]);
+        }
+        return(true);
+    }
+    else Serial.println("Failed to read words");
+    return(false);
+}
+
 bool IIC::ReadRegister(unsigned char devidx,unsigned char regidx,unsigned short * value)
 {
-TwoWire *       wire = GetTwoWire(devidx);
-TwoBytes        two;
-
     if(SelectRegister(devidx,regidx))
     {
-        if(RequestBytes(devidx,2))
-        {
-            two.UCHAR[1] = wire->read();
-            two.UCHAR[0] = wire->read();
-            *value = two.USHORT;
-            return(true);
-        }
-        else Serial.println("Failed to read I2C register");
+        return(ReadWords(devidx,value,1));
     }
-    else Serial.println("Failed to select I2C register");
-    *value = 0;
+    else Serial.println("Failed to select word register");
     return(false);
+}
+
+bool IIC::ReadRegister(unsigned char devidx,unsigned char regidx,unsigned char * value)
+{
+    if(SelectRegister(devidx,regidx))
+    {
+        return(ReadBytes(devidx,value,1));
+    }
+    else Serial.println("Failed to select byte register");
+    return(false);
+}
+
+int IIC::ScanAll(int channel)
+{
+TwoWire *   wire = channel == I2C4 ? &Wire1 : &Wire;
+int         addr,count;
+
+    Serial.print("Scanning I2C");
+    Serial.print(channel + 1);
+    Serial.println("...");
+
+    switch(channel)
+    {
+    case 0 :
+    case 1 :    Serial.println("Channel Not Active");   return(0);
+    case 2 :    wire = &Wire;                           break;
+    case 3 :    wire = &Wire1;                          break;
+    }
+
+    for(count=0,addr=1;addr<127;addr++)
+    {
+        wire->beginTransmission(addr);
+        if(wire->endTransmission() == 0)
+        {
+            Serial.print("Device found at address ");
+            Serial.println(addr,HEX);
+            count++;
+        }
+    }
+    switch(count)
+    {
+    case 0 :
+        Serial.println("No devices found");
+        break;
+    case 1 :
+        Serial.println("Just one device found");
+        break;
+    default :    
+        Serial.print("Total of ");
+        Serial.print(count);
+        Serial.println(" devices found");
+        break;
+    }
+    return(count);
 }
 
 void IIC::LocateDevices(void)
 {
-I2C_Info * tbl;
-
     for(unsigned char devidx=0;devidx<I2C_DEVICES;devidx++)
     {
-        tbl = &I2C_Table[devidx];
-        switch(tbl->Chan)
+        Serial.print(I2C_Table[devidx].Desc);    Serial.print(" (");
+        Serial.print(I2C_Table[devidx].Chip);    Serial.print(") ");
+        if(Close(Open(devidx)) == false)
         {
-        case I2C3 :
-        case I2C4 :
-            Serial.print(tbl->Desc);    Serial.print(" (");
-            Serial.print(tbl->Chip);    Serial.print(") ");
-            if(Close(Open(devidx)) == false)
-            {
-                Serial.print("NOT ");
-            }
-            Serial.println("Found");
-            break;
+            Serial.print("NOT ");
         }
+        Serial.println("Found");
     }
 }
 

@@ -3,13 +3,19 @@
 IIC         I2C;
 HotPins     GPIO;
 TempSensor  Temp;
+RTC         Time;
+
+char ucs(char ch)
+{
+    return((ch >= 'a' && ch <= 'z') ? (ch - ('a' - 'A')) : ch);
+}
 
 void PAX_Startup(void)
 {
     delay(5000);
 
     Serial.println("====================================");
-    Serial.println("PAX Scanner 0256");
+    Serial.println("PAX Scanner 0288");
     Serial.println("====================================");
 
 	GPIO.SetupPins();
@@ -32,6 +38,55 @@ void PAX_Startup(void)
 	delay(125);
 }
 
+inline float ConvertCtoF(float temp)
+{
+    return(temp * 9.0/5.0 + 32.0);
+}
+
+void DisplayTemperature(void)
+{
+float   temp;
+
+    Temp.ReadCurrent(temp);
+    Serial.print("PAX Temperature: ");
+    Serial.print(temp);
+    Serial.print(" C (");
+    Serial.print(ConvertCtoF(temp));
+    Serial.println(" F)");
+}
+
+void DisplayTime(void)
+{
+RTC_Time    rtime;
+
+    if(Time.ReadTime(rtime))
+    {
+        Time.DisplayTime(rtime);
+    }
+}
+
+void CheckForCommands(void)
+{
+char    buffer[80];
+int     bytes = Serial.available();
+
+    if(bytes)
+    {
+        Serial.readBytes(buffer,bytes);
+        switch(ucs(*buffer))
+        {
+        case 'I' :
+            DisplayTime();
+            DisplayTemperature();
+            break;
+        case '1' :  I2C.ScanAll(I2C1);  break;
+        case '2' :  I2C.ScanAll(I2C2);  break;
+        case '3' :  I2C.ScanAll(I2C3);  break;
+        case '4' :  I2C.ScanAll(I2C4);  break;
+        }
+    }
+}
+
 void setup(void)
 {
 	Serial.begin(9600);
@@ -40,27 +95,12 @@ void setup(void)
     Temp.Initialize();
 }
 
-#define MAX_CYCLE   50
-
 void loop(void)
 {
-int         io[IO_COUNT];
-float       temp;
-static int  cycle = 0;
+int io[IO_COUNT];
 
     GPIO.ReadPins(io);
     GPIO.CheckPins(io);
-
-    cycle++; cycle %= MAX_CYCLE;
-    if(cycle == 0)
-    {
-        Temp.ReadCurrent(temp);
-        Serial.print("PAX Temperature: ");
-        Serial.print(temp);
-        Serial.print(" C (");
-        Serial.print(temp*9/5+32);
-        Serial.println(" F)");
-    }
-
+    CheckForCommands();
     delay(50);
 }
