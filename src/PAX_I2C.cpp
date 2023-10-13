@@ -53,6 +53,15 @@ bool IIC::SelectRegister(unsigned char devidx,unsigned char regidx)
     return(Write(devidx,&regidx,1));
 }
 
+void PrintHex(unsigned short value)
+{
+    if(value < 16)
+    {
+        Serial.print("0");
+    }
+    Serial.print(value,16);
+}
+
 bool IIC::WriteRegister(unsigned char devidx,unsigned char regidx,unsigned short value)
 {
 TwoBytes        reg;
@@ -63,7 +72,21 @@ unsigned char   buffer[16];
     buffer[0] = regidx;
     buffer[1] = reg.UCHAR[1];
     buffer[2] = reg.UCHAR[0];
-    return(Write(devidx,buffer,3));
+
+bool    res = Write(devidx,buffer,3);
+
+Serial.print("WriteRegister(");
+PrintHex(devidx);
+Serial.print(",");
+PrintHex(buffer[0]);
+Serial.print(",");
+PrintHex(buffer[1]);
+Serial.print(",");
+PrintHex(buffer[2]);
+Serial.print(") res = ");
+Serial.println(res ? "success" : "fail");
+
+    return(res);
 }
 
 #define MAX_LOOPS       16

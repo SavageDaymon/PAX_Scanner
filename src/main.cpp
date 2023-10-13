@@ -1,9 +1,10 @@
 #include "PAX_Includes.h"
 
-IIC         I2C;
-HotPins     GPIO;
-TempSensor  Temp;
-RTC         Time;
+IIC             I2C;
+HotPins         GPIO;
+TempSensor      Temp;
+RTC             Time;
+A2D_Converter   A2D;
 
 char ucs(char ch)
 {
@@ -34,6 +35,12 @@ void PAX_Startup(void)
 
 	Serial.println("Enabling Temperature Sensor");
     GPIO.DoToggle(I2C3B_RST_N,LOW,50,HIGH);
+
+	Serial.println("Initializing ADC Converter");
+    if(A2D.Initialize() == false)
+    {
+	    Serial.println("ADC Initialization Failed");
+    }
 
 	delay(125);
 }
@@ -75,6 +82,13 @@ int     bytes = Serial.available();
         Serial.readBytes(buffer,bytes);
         switch(ucs(*buffer))
         {
+        case 'A' :
+            if(A2D.PerformConversions())
+            {
+                A2D.OutputValues();
+            }
+            else Serial.println("% PerformConversions() Failed! %");
+            break;
         case 'I' :
             DisplayTime();
             DisplayTemperature();

@@ -5,6 +5,7 @@
 #include "PAX_I2C.h"
 #include "PAX_Temp.h"
 #include "PAX_RTC.h"
+#include "PAX_A2D.h"
 
 union TwoBytes
 {
